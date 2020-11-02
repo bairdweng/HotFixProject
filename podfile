@@ -1,0 +1,7 @@
+platform :ios, '10.0'
+use_frameworks!
+source 'https://mirrors.tuna.tsinghua.edu.cn/git/CocoaPods/Specs.git'
+target 'HotFixProject' do
+#  pod 'JSPatch'
+end
+
