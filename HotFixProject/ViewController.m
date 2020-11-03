@@ -24,7 +24,7 @@
     // Do any additional setup after loading the view.
 }
 
-- (void)handleBtn {   
+- (void)handleBtn {
     NSLog(@"handleBtn handleBtn handleBtn");
 }
 

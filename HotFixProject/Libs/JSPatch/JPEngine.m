@@ -378,8 +378,28 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
         _regex = [NSRegularExpression regularExpressionWithPattern:_regexStr options:0 error:nil];
         // 执行处理后的修复方法
     }
+    
+    /*
+     defineClass("ViewController", {
+         viewDidLoad: function() {
+             // 函数内部会转换成__c方法，请看jspatch 72行
+             self.__c("super")().__c("viewDidLoad")();
+             var textBtn = UIButton.__c("alloc")().__c("initWithFrame")({x:20, y:140, width:100, height:100});
+             self.__c("view")().__c("addSubview")(textBtn);
+             textBtn.__c("setBackgroundColor")(UIColor.__c("redColor")());
+             textBtn.__c("addTarget_action_forControlEvents")(self, "handleBtn", 1);
+             self.__c("view")().__c("setBackgroundColor")(UIColor.__c("redColor")());
+         },
+       handleBtn: function() {
+             console.__c("log")('看，我hook了OC的handleBtn方法')
+         }
+     }, {});
+     
+     
+     */
     NSString *formatedScript = [NSString stringWithFormat:@";(function(){try{\n%@\n}catch(e){_OC_catch(e.message, e.stack)}})();", [_regex stringByReplacingMatchesInString:script options:0 range:NSMakeRange(0, script.length) withTemplate:_replaceStr]];
     @try {
+        // 相当于注入一段代码
         if ([_context respondsToSelector:@selector(evaluateScript:withSourceURL:)]) {
             return [_context evaluateScript:formatedScript withSourceURL:resourceURL];
         } else {
@@ -624,8 +644,9 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
             _exceptionBlock([NSString stringWithFormat:@"can't find the super class %@", superClassName]);
             return @{@"cls": className};
         }
-        // 存在父类，不存在子类，那么创建一个子类时
+        // 存在父类，不存在子类，那么创建一个子类时 添加类
         cls = objc_allocateClassPair(superCls, className.UTF8String, 0);
+        // 注册类
         objc_registerClassPair(cls);
     }
     // 如果有协议，那么拿到所有的协议名，给类增加协议
@@ -635,7 +656,7 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
             class_addProtocol (cls, protocol);
         }
     }
-    // 增加方法
+    // 增加方法 为什么循环两次？
     for (int i = 0; i < 2; i ++) {
         BOOL isInstance = i == 0;
         JSValue *jsMethods = isInstance ? instanceMethods: classMethods;
@@ -655,6 +676,7 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
             }
             
             JSValue *jsMethod = jsMethodArr[1];
+            // 判断某个类是否有
             if (class_respondsToSelector(currCls, NSSelectorFromString(selectorName))) {
                 // TODO: 如果当前类实现了 selectorName 的方法，那么用现在的方法代替原来的方法
                 overrideMethod(currCls, selectorName, jsMethod, !isInstance, NULL);
@@ -711,7 +733,9 @@ static JSValue *getJSFunctionInObjectHierachy(id slf, NSString *selectorName)
     }
     return func;
 }
-// 自己的替换方法, 可以看到调用方法前两个参数一个是 self，一个是 selecter， 对应于方法签名的  @:
+/*
+ JPForwardInvocation的功能，首先获取NSInvocation中的所有参数，将消息转发给JS中对应的实现，获取JS调用返回的结果，完整整个的调用过程。
+ */
 static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, NSInvocation *invocation)
 {
 #ifdef DEBUG
@@ -749,11 +773,11 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
         // 否则用 weak 包裹
         [argList addObject:[JPBoxing boxWeakObj:slf]];
     }
-    
+    // 这里涉及到OC的type encoding，可以参考Apple的官方guide
     for (NSUInteger i = 2; i < numberOfArguments; i++) {
         const char *argumentType = [methodSignature getArgumentTypeAtIndex:i];
         switch(argumentType[0] == 'r' ? argumentType[1] : argumentType[0]) {
-        
+            // 从invocation中获取参数，并将参数添加到argList数组中
             #define JP_FWD_ARG_CASE(_typeChar, _type) \
             case _typeChar: {   \
                 _type arg;  \
@@ -775,8 +799,10 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
             JP_FWD_ARG_CASE('d', double)
             JP_FWD_ARG_CASE('B', BOOL)
             case '@': {
+                // 处理id类型的参数，使用__unsafe_unretianed参数，避免内存泄露???
                 __unsafe_unretained id arg;
                 [invocation getArgument:&arg atIndex:i];
+                // 对于block参数做特殊处理，需要进行copy；使用_nilObj表示nil，让参数可以完整传递给JS
                 if ([arg isKindOfClass:NSClassFromString(@"NSBlock")]) {
                     [argList addObject:(arg ? [arg copy]: _nilObj)];
                 } else {
@@ -785,6 +811,8 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
                 break;
             }
             case '{': {
+                // 处理结构体类型参数
+                // 获取结构体类型的名称，然后根据这个把参数包装为JSValue类型
                 NSString *typeString = extractStructName([NSString stringWithUTF8String:argumentType]);
                 #define JP_FWD_ARG_STRUCT(_type, _transFunc) \
                 if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
@@ -797,7 +825,7 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
                 JP_FWD_ARG_STRUCT(CGPoint, valueWithPoint)
                 JP_FWD_ARG_STRUCT(CGSize, valueWithSize)
                 JP_FWD_ARG_STRUCT(NSRange, valueWithRange)
-                
+                // 处理自定义类型的结构体
                 @synchronized (_context) {
                     NSDictionary *structDefine = _registeredStruct[typeString];
                     if (structDefine) {
@@ -816,6 +844,7 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
                 break;
             }
             case ':': {
+                // 处理selector类型参数
                 SEL selector;
                 [invocation getArgument:&selector atIndex:i];
                 NSString *selectorName = NSStringFromSelector(selector);
@@ -830,6 +859,7 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
                 break;
             }
             case '#': {
+                // Class类类型
                 Class arg;
                 [invocation getArgument:&arg atIndex:i];
                 [argList addObject:[JPBoxing boxClass:arg]];
@@ -1053,19 +1083,22 @@ static void overrideMethod(Class cls, NSString *selectorName, JSValue *function,
     SEL selector = NSSelectorFromString(selectorName);
     // 没有类型签名的时候获取原来的方法的类型签名
     if (!typeDescription) {
-        Method method = class_getInstanceMethod(cls, selector);
-        typeDescription = (char *)method_getTypeEncoding(method);
+        Method method = class_getInstanceMethod(cls, selector);// 得到实例方法
+        typeDescription = (char *)method_getTypeEncoding(method);//字符串编码
     }
-    // 获取原来方法的 IMP
+    // 获取原来方法的 IMP class_respondsToSelector 判断某个类是否有实例方法
     IMP originalImp = class_respondsToSelector(cls, selector) ? class_getMethodImplementation(cls, selector) : NULL;
     
-    // 获取消息转发处理的系统函数实现 IMP
+    // 获取消息转发处理的系统函数实现 IMP 将消息进行转发？
+    // 相比较而言，该框架没有没有直接根据返回值所占字节书来判断，而是使用了debugDescription进行判断是否是特殊的结构体，可谓是相当"鸡贼"了.
+    
     IMP msgForwardIMP = _objc_msgForward;
     #if !defined(__arm64__)
         if (typeDescription[0] == '{') {
             //In some cases that returns struct, we should use the '_stret' API:
             //http://sealiesoftware.com/blog/archive/2008/10/30/objc_explain_objc_msgSend_stret.html
             //NSMethodSignature knows the detail but has no API to return, we can only get the info from debugDescription.
+            // 这个方法签名有多少个参数，第一第二个参数一个是 返回值，一个是 SEL
             NSMethodSignature *methodSignature = [NSMethodSignature signatureWithObjCTypes:typeDescription];
             if ([methodSignature.debugDescription rangeOfString:@"is special struct return? YES"].location != NSNotFound) {
                 msgForwardIMP = (IMP)_objc_msgForward_stret;
@@ -1073,7 +1106,9 @@ static void overrideMethod(Class cls, NSString *selectorName, JSValue *function,
         }
     #endif
     // 将cls中原来 forwardInvocaiton: 的实现替换成 JPForwardInvocation:函数实现.
+    // 如果不是静态方法的实现。替换他
     if (class_getMethodImplementation(cls, @selector(forwardInvocation:)) != (IMP)JPForwardInvocation) {
+        // 这里替换方法 class_replaceMethod 不一定返回非空的方法
         IMP originalForwardImp = class_replaceMethod(cls, @selector(forwardInvocation:), (IMP)JPForwardInvocation, "v@:@");
         // 为cls添加新的SEL(ORIGforwardInvocation:)，指向原始 forwardInvocation: 的实现IMP.
         if (originalForwardImp) {

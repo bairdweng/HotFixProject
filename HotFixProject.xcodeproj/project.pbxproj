@@ -15,8 +15,8 @@
 		DA5919A3254FDFEF0034D72A /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = DA5919A1254FDFEF0034D72A /* LaunchScreen.storyboard */; };
 		DA5919A6254FDFEF0034D72A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = DA5919A5254FDFEF0034D72A /* main.m */; };
 		DA5919B1254FE2C40034D72A /* demo.js in Resources */ = {isa = PBXBuildFile; fileRef = DA5919B0254FE2C40034D72A /* demo.js */; };
-		DA5919BA254FFC7E0034D72A /* JPEngine.m in Sources */ = {isa = PBXBuildFile; fileRef = DA5919B7254FFC7E0034D72A /* JPEngine.m */; };
-		DA5919BB254FFC7E0034D72A /* JSPatch.js in Resources */ = {isa = PBXBuildFile; fileRef = DA5919B9254FFC7E0034D72A /* JSPatch.js */; };
+		DA95D1932550EF9E002386A8 /* JPEngine.m in Sources */ = {isa = PBXBuildFile; fileRef = DA95D1902550EF9E002386A8 /* JPEngine.m */; };
+		DA95D1942550EF9E002386A8 /* JSPatch.js in Resources */ = {isa = PBXBuildFile; fileRef = DA95D1922550EF9E002386A8 /* JSPatch.js */; };
 		DF4449BC3DAA68FA0E649ADE /* Pods_HotFixProject.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5203BF6FC43B2F602D742C3C /* Pods_HotFixProject.framework */; };
 /* End PBXBuildFile section */
 
@@ -37,9 +37,9 @@
 		DA5919A4254FDFEF0034D72A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DA5919A5254FDFEF0034D72A /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		DA5919B0254FE2C40034D72A /* demo.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = demo.js; sourceTree = "<group>"; };
-		DA5919B7254FFC7E0034D72A /* JPEngine.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = JPEngine.m; sourceTree = "<group>"; };
-		DA5919B8254FFC7E0034D72A /* JPEngine.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = JPEngine.h; sourceTree = "<group>"; };
-		DA5919B9254FFC7E0034D72A /* JSPatch.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = JSPatch.js; sourceTree = "<group>"; };
+		DA95D1902550EF9E002386A8 /* JPEngine.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = JPEngine.m; sourceTree = "<group>"; };
+		DA95D1912550EF9E002386A8 /* JPEngine.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = JPEngine.h; sourceTree = "<group>"; };
+		DA95D1922550EF9E002386A8 /* JSPatch.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = JSPatch.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -112,17 +112,17 @@
 		DA5919B3254FFC380034D72A /* Libs */ = {
 			isa = PBXGroup;
 			children = (
-				DA5919B6254FFC7E0034D72A /* JSPatch */,
+				DA95D18F2550EF9E002386A8 /* JSPatch */,
 			);
 			path = Libs;
 			sourceTree = "<group>";
 		};
-		DA5919B6254FFC7E0034D72A /* JSPatch */ = {
+		DA95D18F2550EF9E002386A8 /* JSPatch */ = {
 			isa = PBXGroup;
 			children = (
-				DA5919B8254FFC7E0034D72A /* JPEngine.h */,
-				DA5919B7254FFC7E0034D72A /* JPEngine.m */,
-				DA5919B9254FFC7E0034D72A /* JSPatch.js */,
+				DA95D1912550EF9E002386A8 /* JPEngine.h */,
+				DA95D1902550EF9E002386A8 /* JPEngine.m */,
+				DA95D1922550EF9E002386A8 /* JSPatch.js */,
 			);
 			path = JSPatch;
 			sourceTree = "<group>";
@@ -185,7 +185,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DA5919A3254FDFEF0034D72A /* LaunchScreen.storyboard in Resources */,
-				DA5919BB254FFC7E0034D72A /* JSPatch.js in Resources */,
+				DA95D1942550EF9E002386A8 /* JSPatch.js in Resources */,
 				DA5919A0254FDFEF0034D72A /* Assets.xcassets in Resources */,
 				DA59199E254FDFEC0034D72A /* Main.storyboard in Resources */,
 				DA5919B1254FE2C40034D72A /* demo.js in Resources */,
@@ -225,7 +225,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DA59199B254FDFEC0034D72A /* ViewController.m in Sources */,
-				DA5919BA254FFC7E0034D72A /* JPEngine.m in Sources */,
+				DA95D1932550EF9E002386A8 /* JPEngine.m in Sources */,
 				DA591995254FDFEC0034D72A /* AppDelegate.m in Sources */,
 				DA5919A6254FDFEF0034D72A /* main.m in Sources */,
 				DA591998254FDFEC0034D72A /* SceneDelegate.m in Sources */,

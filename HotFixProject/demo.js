@@ -13,8 +13,9 @@ defineClass("ViewController", {
         self.view().addSubview(textBtn);
         textBtn.setBackgroundColor(UIColor.redColor());
         textBtn.addTarget_action_forControlEvents(self, "handleBtn", 1);
+        self.view().setBackgroundColor(UIColor.redColor());
     },
-    handleBtn: function() {
+  handleBtn: function() {
         console.log('看，我hook了OC的handleBtn方法')
     }
 }, {});
