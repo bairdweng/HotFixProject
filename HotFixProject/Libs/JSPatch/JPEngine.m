@@ -717,7 +717,6 @@ static JSValue *getJSFunctionInObjectHierachy(id slf, NSString *selectorName)
 {
     Class cls = object_getClass(slf);
     // 如果是正在在 js 中调用 oc 一个类中的 super 的方法，那么就通过 _currInvokeSuperClsName 记录下来。因为在调用的过程中由于是 super 方法，selector 会有一个 SUPER_ 的前缀。消息转发到这里的时候需要知道当前调用的其实是一个 super 的方法，需要把 SUPER_ 去除。
-
     if (_currInvokeSuperClsName[selectorName]) {
         cls = NSClassFromString(_currInvokeSuperClsName[selectorName]);
         selectorName = [selectorName stringByReplacingOccurrencesOfString:@"_JPSUPER_" withString:@"_JP"];
@@ -733,11 +732,9 @@ static JSValue *getJSFunctionInObjectHierachy(id slf, NSString *selectorName)
     }
     return func;
 }
-/*
- JPForwardInvocation的功能，首先获取NSInvocation中的所有参数，将消息转发给JS中对应的实现，获取JS调用返回的结果，完整整个的调用过程。
- */
-static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, NSInvocation *invocation)
-{
+
+# pragma mark- 替换方法的实现 不实现方法只是被替换，但无任何实现
+static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, NSInvocation *invocation) {
 #ifdef DEBUG
     _JSLastCallStack = [NSThread callStackSymbols];
 #endif
@@ -745,35 +742,23 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
     id slf = assignSlf;
     NSMethodSignature *methodSignature = [invocation methodSignature];
     NSInteger numberOfArguments = [methodSignature numberOfArguments];
-    
     NSString *selectorName = NSStringFromSelector(invocation.selector);
     NSString *JPSelectorName = [NSString stringWithFormat:@"_JP%@", selectorName];
-    // 判断 JSPSEL 是否有对应的 js 函数的实现，如果没有就原始方法的消息转发的流程
-    // （被 defineClass 过的类会被替换 forwardInvocation 方法。如果有方法没有被实现，且没有被 JS重写。那么就会走原始的 forwardInvocation 要找到的是 ORIGforwardInvocation 方法）
-    //  这是一个递归方法
     JSValue *jsFunc = getJSFunctionInObjectHierachy(slf, JPSelectorName);
     if (!jsFunc) {
         JPExecuteORIGForwardInvocation(slf, selector, invocation);
         return;
     }
-    //  从NSInvocation中获取调用的参数，把self与相应的参数都转换成js对象并封装到一个集合中
-    //  js端重写的函数，传递过来是JSValue类型，用callWithArgument:调用js方法，参数也要是js对象.
     NSMutableArray *argList = [[NSMutableArray alloc] init];
     if ([slf class] == slf) {
-        // 如果调用的是类方法，那么给入参列表的第一个参数就是一个包含  __clsName 的 object
         [argList addObject:[JSValue valueWithObject:@{@"__clsName": NSStringFromClass([slf class])} inContext:_context]];
     } else if ([selectorName isEqualToString:@"dealloc"]) {
-        // 对于被释放的对象，使用 assign 来保存 self 的指针
-        // 因为在 dealloc 的时候，系统不让将 self 赋值给一个 weak 对象。（在 dealloc 的时候应该会有一些操作 weak 字典的步骤，所以不能再这个阶段再操作 weak）
-        // assign 和 weak 的区别在于 assign 在指向的对象销毁的时候不会把当前指针置为 nil
-        // 所以这里最终要自己确保不会在 dealloc 后调用 slf 的方法
+     
         [argList addObject:[JPBoxing boxAssignObj:slf]];
         deallocFlag = YES;
     } else {
-        // 否则用 weak 包裹
         [argList addObject:[JPBoxing boxWeakObj:slf]];
     }
-    // 这里涉及到OC的type encoding，可以参考Apple的官方guide
     for (NSUInteger i = 2; i < numberOfArguments; i++) {
         const char *argumentType = [methodSignature getArgumentTypeAtIndex:i];
         switch(argumentType[0] == 'r' ? argumentType[1] : argumentType[0]) {
@@ -799,10 +784,8 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
             JP_FWD_ARG_CASE('d', double)
             JP_FWD_ARG_CASE('B', BOOL)
             case '@': {
-                // 处理id类型的参数，使用__unsafe_unretianed参数，避免内存泄露???
                 __unsafe_unretained id arg;
                 [invocation getArgument:&arg atIndex:i];
-                // 对于block参数做特殊处理，需要进行copy；使用_nilObj表示nil，让参数可以完整传递给JS
                 if ([arg isKindOfClass:NSClassFromString(@"NSBlock")]) {
                     [argList addObject:(arg ? [arg copy]: _nilObj)];
                 } else {
@@ -811,8 +794,6 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
                 break;
             }
             case '{': {
-                // 处理结构体类型参数
-                // 获取结构体类型的名称，然后根据这个把参数包装为JSValue类型
                 NSString *typeString = extractStructName([NSString stringWithUTF8String:argumentType]);
                 #define JP_FWD_ARG_STRUCT(_type, _transFunc) \
                 if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
@@ -825,7 +806,6 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
                 JP_FWD_ARG_STRUCT(CGPoint, valueWithPoint)
                 JP_FWD_ARG_STRUCT(CGSize, valueWithSize)
                 JP_FWD_ARG_STRUCT(NSRange, valueWithRange)
-                // 处理自定义类型的结构体
                 @synchronized (_context) {
                     NSDictionary *structDefine = _registeredStruct[typeString];
                     if (structDefine) {
@@ -844,7 +824,6 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
                 break;
             }
             case ':': {
-                // 处理selector类型参数
                 SEL selector;
                 [invocation getArgument:&selector atIndex:i];
                 NSString *selectorName = NSStringFromSelector(selector);
@@ -859,7 +838,6 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
                 break;
             }
             case '#': {
-                // Class类类型
                 Class arg;
                 [invocation getArgument:&arg atIndex:i];
                 [argList addObject:[JPBoxing boxClass:arg]];
@@ -871,42 +849,27 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
             }
         }
     }
-    // 如果当前调用的方法是 js 引起的，并且 js 调用了一个 super 的方法。那么会在 _currInvokeSuperClsName 中保存一个调用的方法名。这个方法名被加上了前缀 SUPER_。 因此真正调用的时候要把这个前缀替换为 _JP。这样才能找到保存在 JSOverrideMethods 字典中的相应方法
-
     if (_currInvokeSuperClsName[selectorName]) {
         Class cls = NSClassFromString(_currInvokeSuperClsName[selectorName]);
         NSString *tmpSelectorName = [[selectorName stringByReplacingOccurrencesOfString:@"_JPSUPER_" withString:@"_JP"] stringByReplacingOccurrencesOfString:@"SUPER_" withString:@"_JP"];
-        // 如果父类没有重写相应的方法
         if (!_JSOverideMethods[cls][tmpSelectorName]) {
             NSString *ORIGSelectorName = [selectorName stringByReplacingOccurrencesOfString:@"SUPER_" withString:@"ORIG"];
             [argList removeObjectAtIndex:0];
-            // 如果父类没有重写这个方法那么就是调用 oc 的方法，oc 直接调用父类的相应方法
             id retObj = callSelector(_currInvokeSuperClsName[selectorName], ORIGSelectorName, [JSValue valueWithObject:argList inContext:_context], [JSValue valueWithObject:@{@"__obj": slf, @"__realClsName": @""} inContext:_context], NO);
             id __autoreleasing ret = formatJSToOC([JSValue valueWithObject:retObj inContext:_context]);
             [invocation setReturnValue:&ret];
             return;
         }
     }
-    // 转化为 js 的参数形式，将对象包裹为 {__obj: obj, __clsName: xxx} 的形式
     NSArray *params = _formatOCToJSList(argList);
     char returnType[255];
-    // 获取方法的返回参数的签名
     strcpy(returnType, [methodSignature methodReturnType]);
-    
-    // 判断 returnType 的符号签名
-
     if (strcmp(returnType, @encode(JPDouble)) == 0) {
         strcpy(returnType, @encode(double));
     }
     if (strcmp(returnType, @encode(JPFloat)) == 0) {
         strcpy(returnType, @encode(float));
     }
-    // 先调用 js 重写的方法，得到 返回值 jsval
-
-    // 如果 jsval 不是空，并且需要 isPerformInOC，那么获取其 callback 方法，
-    // 执行完后拿到数据转为 js 后调用 callback 方法
-
-    // 如果 jsval 没有 isPerformInOC，那么就是执行完 js 方法后直接往下走
     switch (returnType[0] == 'r' ? returnType[1] : returnType[0]) {
         #define JP_FWD_RET_CALL_JS \
             JSValue *jsval; \
@@ -1026,24 +989,18 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
         }
         _pointersToRelease = nil;
     }
-    // 如果这个方法是 dealloc 方法
-
     if (deallocFlag) {
         slf = nil;
         Class instClass = object_getClass(assignSlf);
-        // 拿到 dealloc 方法实现
         Method deallocMethod = class_getInstanceMethod(instClass, NSSelectorFromString(@"ORIGdealloc"));
-        // 调用
         void (*originalDealloc)(__unsafe_unretained id, SEL) = (__typeof__(originalDealloc))method_getImplementation(deallocMethod);
         originalDealloc(assignSlf, NSSelectorFromString(@"dealloc"));
     }
 }
 
-static void JPExecuteORIGForwardInvocation(id slf, SEL selector, NSInvocation *invocation)
-{
+static void JPExecuteORIGForwardInvocation(id slf, SEL selector, NSInvocation *invocation) {
     // 拿到原始的被替换的 forwardInvocation： ORIDforwardInvocation, 然后调用原始的转发方法
     SEL origForwardSelector = @selector(ORIGforwardInvocation:);
-    
     if ([slf respondsToSelector:origForwardSelector]) {
         NSMethodSignature *methodSignature = [slf methodSignatureForSelector:origForwardSelector];
         if (!methodSignature) {
@@ -1141,8 +1098,7 @@ static void overrideMethod(Class cls, NSString *selectorName, JSValue *function,
 /* OC端执行方法
  如果 js 端调用的是父类的方法，那么模拟 OC 调用父类的过程。OC 中调用父类，调用者还是当前子类，但是调用的 IMP 则是父类方法的 IMP。因此，要模拟 OC 中的方法调用，需要给 OC 添加和父类一样的 IMP 实现。以 SUPER_XXX 表示 SEL。
 */
-static id callSelector(NSString *className, NSString *selectorName, JSValue *arguments, JSValue *instance, BOOL isSuper)
-{
+static id callSelector(NSString *className, NSString *selectorName, JSValue *arguments, JSValue *instance, BOOL isSuper) {
     // realClsName 是真正要调用的类，和 clsName 的区别在于如果要调用的方法是父类方法，那么 clsName 会变为父类名，而 realClsName 仍然是子类名
 
     NSString *realClsName = [[instance valueForProperty:@"__realClsName"] toString];
